@@ -453,7 +453,7 @@ module WEBrick
       end
 
       @request_time = Time.now
-      if /^(\S+)\s+(\S++)(?:\s+HTTP\/(\d+\.\d+))?\r?\n/mo =~ @request_line
+      if /^(\S+) (\S++)(?: HTTP\/(\d+\.\d+))?\r\n/mo =~ @request_line
         @request_method = $1
         @unparsed_uri   = $2
         @http_version   = HTTPVersion.new($3 ? $3 : "0.9")
@@ -466,7 +466,7 @@ module WEBrick
     def read_header(socket)
       if socket
         while line = read_line(socket)
-          break if /\A(#{CRLF}|#{LF})\z/om =~ line
+          break if /\A#{CRLF}\z/om =~ line
           if (@request_bytes += line.bytesize) > MAX_HEADER_LENGTH
             raise HTTPStatus::RequestEntityTooLarge, 'headers too large'
           end
@@ -502,6 +502,10 @@ module WEBrick
     def read_body(socket, block)
       return unless socket
       if tc = self['transfer-encoding']
+        if self['content-length']
+          raise HTTPStatus::BadRequest, "request with both transfer-encoding and content-length, possible request smuggling"
+        end
+
         case tc
         when /\Achunked\z/io then read_chunked(socket, block)
         else raise HTTPStatus::NotImplemented, "Transfer-Encoding: #{tc}."
